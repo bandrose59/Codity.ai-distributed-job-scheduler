@@ -1,6 +1,5 @@
 # Distributed Job Scheduler
-
-Production-inspired distributed job scheduler assignment.
+Distributed job scheduler assignment.
 
 The project includes authentication, tenant authorization, queue processing, workers, retries,
 scheduling, and an operational dashboard. PostgreSQL is the source of truth for jobs and execution
@@ -234,4 +233,3 @@ credentials. Production should use secret management and `prisma migrate deploy`
 - [API reference](docs/api.md)
 - [Deployment](docs/deployment.md)
 - [Performance report](docs/performance-report.md)
-- [Submission checklist](docs/submission-checklist.md)
