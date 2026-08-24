@@ -1,0 +1,26 @@
+{
+  "name": "@job-scheduler/scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "publisher": "tsx src/events/publisher-index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests --config ../../vitest.config.ts"
+  },
+  "dependencies": {
+    "@job-scheduler/config": "workspace:*",
+    "@job-scheduler/database": "workspace:*",
+    "@prisma/client": "^6.19.3",
+    "cron-parser": "^5.10.0",
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  }
+}

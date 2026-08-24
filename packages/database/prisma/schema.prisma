@@ -1,0 +1,371 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum QueueStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum RetryStrategy {
+  FIXED
+  LINEAR
+  EXPONENTIAL
+}
+
+enum JobType {
+  IMMEDIATE
+  DELAYED
+  SCHEDULED
+  CRON
+  BATCH
+}
+
+enum JobStatus {
+  SCHEDULED
+  QUEUED
+  CLAIMED
+  RUNNING
+  COMPLETED
+  FAILED
+  RETRYING
+  CANCELLED
+}
+
+enum JobExecutionStatus {
+  CLAIMED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  ABANDONED
+}
+
+enum JobLogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+enum WorkerStatus {
+  STARTING
+  ACTIVE
+  DRAINING
+  STOPPED
+  DEAD
+}
+
+enum SchedulerStatus {
+  STARTING
+  ACTIVE
+  DRAINING
+  STOPPED
+}
+
+model Scheduler {
+  id                  String          @id @default(uuid()) @db.Uuid
+  schedulerIdentifier String          @unique @map("scheduler_identifier")
+  status              SchedulerStatus @default(STARTING)
+  startedAt           DateTime        @default(now()) @map("started_at")
+  stoppedAt           DateTime?       @map("stopped_at")
+  lastHeartbeatAt     DateTime?       @map("last_heartbeat_at")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  @@index([lastHeartbeatAt])
+  @@index([status])
+  @@map("schedulers")
+}
+
+model OutboxEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  eventType     String    @map("event_type")
+  aggregateType String    @map("aggregate_type")
+  aggregateId   String    @map("aggregate_id") @db.Uuid
+  payload       Json
+  createdAt     DateTime  @default(now()) @map("created_at")
+  publishedAt   DateTime? @map("published_at")
+  reservedAt    DateTime? @map("reserved_at")
+  reservedBy    String?   @map("reserved_by")
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+
+  @@index([publishedAt, createdAt])
+  @@index([aggregateType, aggregateId])
+  @@map("outbox_events")
+}
+
+model User {
+  id           String               @id @default(uuid()) @db.Uuid
+  email        String               @unique
+  passwordHash String               @map("password_hash")
+  name         String
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  memberships  OrganizationMember[]
+  auditLogs    AuditLog[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model Organization {
+  id        String               @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+  members   OrganizationMember[]
+  projects  Project[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  id             String           @id @default(uuid()) @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  role           OrganizationRole @default(MEMBER)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model Project {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String
+  description    String?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  deletedAt      DateTime?    @map("deleted_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  queues         Queue[]
+
+  @@index([organizationId])
+  @@index([deletedAt])
+  @@map("projects")
+}
+
+model Queue {
+  id               String          @id @default(uuid()) @db.Uuid
+  projectId        String          @map("project_id") @db.Uuid
+  name             String
+  description      String?
+  priority         Int             @default(0)
+  concurrencyLimit Int             @default(1) @map("concurrency_limit")
+  status           QueueStatus     @default(ACTIVE)
+  retryPolicyId    String?         @map("retry_policy_id") @db.Uuid
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  deletedAt        DateTime?       @map("deleted_at")
+  project          Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  retryPolicy      RetryPolicy?    @relation(fields: [retryPolicyId], references: [id], onDelete: SetNull)
+  jobs             Job[]
+  scheduledJobs    ScheduledJob[]
+  deadLetterJobs   DeadLetterJob[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@index([retryPolicyId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("queues")
+}
+
+model RetryPolicy {
+  id             String        @id @default(uuid()) @db.Uuid
+  strategy       RetryStrategy
+  maxAttempts    Int           @map("max_attempts")
+  initialDelayMs Int           @map("initial_delay_ms")
+  maxDelayMs     Int?          @map("max_delay_ms")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  queues         Queue[]
+
+  @@map("retry_policies")
+}
+
+model Job {
+  id                  String         @id @default(uuid()) @db.Uuid
+  queueId             String         @map("queue_id") @db.Uuid
+  type                JobType
+  payload             Json
+  priority            Int            @default(0)
+  status              JobStatus
+  attemptCount        Int            @default(0) @map("attempt_count")
+  maxAttempts         Int            @map("max_attempts")
+  retryStrategy       RetryStrategy? @map("retry_strategy")
+  retryInitialDelayMs Int?           @map("retry_initial_delay_ms")
+  retryMaxDelayMs     Int?           @map("retry_max_delay_ms")
+  retryJitterMs       Int?           @map("retry_jitter_ms")
+  scheduledAt         DateTime?      @map("scheduled_at")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+  claimedAt           DateTime?      @map("claimed_at")
+  startedAt           DateTime?      @map("started_at")
+  completedAt         DateTime?      @map("completed_at")
+  failedAt            DateTime?      @map("failed_at")
+  workerId            String?        @map("worker_id") @db.Uuid
+  lastError           String?        @map("last_error")
+  idempotencyKey      String?        @map("idempotency_key")
+  leaseExpiresAt      DateTime?      @map("lease_expires_at")
+  queue               Queue          @relation(fields: [queueId], references: [id], onDelete: Restrict)
+  worker              Worker?        @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  executions          JobExecution[]
+  logs                JobLog[]
+  deadLetterJob       DeadLetterJob?
+
+  @@unique([queueId, idempotencyKey])
+  @@index([queueId, status, priority, createdAt])
+  @@index([status, scheduledAt])
+  @@index([workerId])
+  @@index([idempotencyKey])
+  @@index([leaseExpiresAt])
+  @@map("jobs")
+}
+
+model JobExecution {
+  id            String             @id @default(uuid()) @db.Uuid
+  jobId         String             @map("job_id") @db.Uuid
+  workerId      String?            @map("worker_id") @db.Uuid
+  attempt       Int
+  status        JobExecutionStatus
+  startedAt     DateTime           @map("started_at")
+  completedAt   DateTime?          @map("completed_at")
+  durationMs    Int?               @map("duration_ms")
+  error         String?
+  output        Json?
+  stdout        String?
+  stderr        String?
+  exitCode      Int?               @map("exit_code")
+  metadata      Json?
+  createdAt     DateTime           @default(now()) @map("created_at")
+  job           Job                @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  worker        Worker?            @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  logs          JobLog[]
+  deadLetterJob DeadLetterJob?
+
+  @@unique([jobId, attempt])
+  @@index([jobId, createdAt])
+  @@index([workerId, createdAt])
+  @@map("job_executions")
+}
+
+model JobLog {
+  id          String        @id @default(uuid()) @db.Uuid
+  jobId       String        @map("job_id") @db.Uuid
+  executionId String?       @map("execution_id") @db.Uuid
+  level       JobLogLevel
+  message     String
+  metadata    Json?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  execution   JobExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  job         Job           @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  @@index([jobId, createdAt])
+  @@index([executionId, createdAt])
+  @@map("job_logs")
+}
+
+model ScheduledJob {
+  id             String    @id @default(uuid()) @db.Uuid
+  queueId        String    @map("queue_id") @db.Uuid
+  cronExpression String?   @map("cron_expression")
+  timezone       String?
+  nextRunAt      DateTime  @map("next_run_at")
+  lastRunAt      DateTime? @map("last_run_at")
+  enabled        Boolean   @default(true)
+  payload        Json
+  jobType        JobType   @map("job_type")
+  idempotencyKey String?   @map("idempotency_key")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  queue          Queue     @relation(fields: [queueId], references: [id], onDelete: Restrict)
+
+  @@unique([queueId, idempotencyKey])
+  @@index([queueId])
+  @@index([enabled, nextRunAt])
+  @@map("scheduled_jobs")
+}
+
+model Worker {
+  id               String            @id @default(uuid()) @db.Uuid
+  workerIdentifier String            @unique @map("worker_identifier")
+  hostname         String?
+  processId        Int?              @map("process_id")
+  status           WorkerStatus      @default(STARTING)
+  lastHeartbeatAt  DateTime?         @map("last_heartbeat_at")
+  startedAt        DateTime          @default(now()) @map("started_at")
+  stoppedAt        DateTime?         @map("stopped_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  heartbeats       WorkerHeartbeat[]
+  jobs             Job[]
+  executions       JobExecution[]
+
+  @@index([lastHeartbeatAt])
+  @@index([status])
+  @@map("workers")
+}
+
+model WorkerHeartbeat {
+  id         String   @id @default(uuid()) @db.Uuid
+  workerId   String   @map("worker_id") @db.Uuid
+  recordedAt DateTime @default(now()) @map("recorded_at")
+  metadata   Json?
+  worker     Worker   @relation(fields: [workerId], references: [id], onDelete: Restrict)
+
+  @@index([workerId, recordedAt])
+  @@map("worker_heartbeats")
+}
+
+model DeadLetterJob {
+  id              String        @id @default(uuid()) @db.Uuid
+  jobId           String        @unique @map("job_id") @db.Uuid
+  queueId         String        @map("queue_id") @db.Uuid
+  lastExecutionId String?       @unique @map("last_execution_id") @db.Uuid
+  reason          String
+  attemptCount    Int           @map("attempt_count")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  retriedAt       DateTime?     @map("retried_at")
+  retryReason     String?       @map("retry_reason")
+  job             Job           @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  lastExecution   JobExecution? @relation(fields: [lastExecutionId], references: [id], onDelete: SetNull)
+  queue           Queue         @relation(fields: [queueId], references: [id], onDelete: Restrict)
+
+  @@index([queueId, createdAt])
+  @@map("dead_letter_jobs")
+}
+
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  action    String
+  targetType String  @map("target_type")
+  targetId  String   @map("target_id") @db.Uuid
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  actor     User     @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@map("audit_logs")
+}

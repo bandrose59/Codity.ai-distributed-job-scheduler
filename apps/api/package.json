@@ -1,0 +1,32 @@
+{
+  "name": "@job-scheduler/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests --config ../../vitest.config.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@job-scheduler/config": "workspace:*",
+    "@job-scheduler/database": "workspace:*",
+    "@prisma/client": "^6.19.3",
+    "argon2": "^0.44.0",
+    "cron-parser": "^5.10.0",
+    "fastify": "^5.6.2",
+    "ioredis": "^5.11.1",
+    "jsonwebtoken": "^9.0.3",
+    "kafkajs": "^2.2.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  }
+}

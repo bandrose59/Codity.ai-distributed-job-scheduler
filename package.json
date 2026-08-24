@@ -1,0 +1,38 @@
+{
+  "name": "distributed-job-scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.25.0",
+  "scripts": {
+    "install": "node -e \"console.log('Use pnpm install from the repository root.')\"",
+    "build": "pnpm -r --workspace-concurrency=1 build",
+    "dev": "pnpm --parallel --filter @job-scheduler/api --filter @job-scheduler/worker --filter @job-scheduler/scheduler --filter @job-scheduler/dashboard dev",
+    "typecheck": "pnpm -r --workspace-concurrency=1 typecheck",
+    "lint": "eslint . --max-warnings 0",
+    "test": "pnpm -r --workspace-concurrency=1 test",
+    "test:load": "node scripts/load-test.mjs",
+    "test:stress": "node scripts/load-test.mjs --duration-ms 60000 --concurrency 500",
+    "test:integration": "pnpm test",
+    "test:e2e": "pnpm test",
+    "db:cleanup:stale-workers": "tsx scripts/cleanup-stale-workers.ts",
+    "db:cleanup:retention": "tsx scripts/retention-cleanup.ts",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "dotenv": "^16.4.7",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
+    "prisma": "6.19.3",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "vitest": "^4.0.8"
+  }
+}

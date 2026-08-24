@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+.turbo/
+
+*.log
+test-log.txt
+logs/
+
+generated/
